@@ -87,7 +87,7 @@ defineModule(sim, list(
     defineParameter(".studyAreaName", "character", NA, NA, NA,
                     desc = paste("Human-readable name for the growth curve filename.",
                                  "If `NA`, a hash of sppEquiv[[sppEquivCol]] will be used.")),
-    defineParameter(".useCache", "character", c(".inputObjects"), NA, NA,
+    defineParameter(".useCache", "character", c(".inputObjects", "init"), NA, NA,
                     desc = paste("Should this entire module be run with caching activated?",
                                  "This is generally intended for data-type modules,",
                                  "where stochasticity and time are not relevant")),
@@ -184,6 +184,14 @@ doEvent.Biomass_speciesParameters = function(sim, eventTime, eventType) {
   switch(
     eventType,
     init = {
+      ## No tree species in this study area (sppEquiv has no rows, established by fireSense_ELFs):
+      ## there are no species parameters to estimate. Biomass_borealDataPrep already supplied the
+      ## empty species / speciesEcoregion tables, so leave them and schedule nothing.
+      if (is.data.frame(sim$sppEquiv) && nrow(sim$sppEquiv) == 0L) {
+        message("Biomass_speciesParameters: no tree species in this study area; nothing to estimate")
+        return(invisible(sim))
+      }
+
       ## build growth curves if applicable
       sim <- Init(sim)
 
@@ -216,36 +224,38 @@ Init <- function(sim) {
   sim$speciesGrowthCurvesPSP <- data.table::data.table()
 
   ## load factorial tables -------------------------------------------------------------------------
+  ## These two tables are scratch for this event only: nothing after `Init` reads them. They are kept
+  ## as locals, not `mod$` objects, so the ~8 GB (`cohortDataFactorial`) + ~1 GB (`speciesTableFactorial`)
+  ## are freed when `Init` returns instead of living in the simList's `.modObjs` for the whole simulation.
   fmt <- "feather" ## faster for small-med data compared to parquet
 
   if (tools::file_ext(sim$cohortDataFactorial_path) == "rds") {
     ## using rds default from .inputObjects
-    mod$cohortDataFactorial <- prepInputs(
+    cohortDataFactorial <- prepInputs(
       targetFile = basename(sim$cohortDataFactorial_path),
       destinationPath = inputPath(sim),
       fun = "readRDS",
-      overwrite = TRUE, useCache = FALSE, # don't internal cache as it is a waste of time
+      useCache = FALSE, # don't internal cache as it is a waste of time
       url = extractURL("cohortDataFactorial_path", sim)
     ) |> Cache(.functionName = "prepInputs_cohortDataFactorial")
   } else {
     ## connect to arrow dataset
     ## TODO: consider adding try-catch and update Biomass_speciesFactorial if fails occur
-    mod$cohortDataFactorial <- arrow::open_dataset(sim$cohortDataFactorial_path, format = fmt)
+    cohortDataFactorial <- arrow::open_dataset(sim$cohortDataFactorial_path, format = fmt)
   }
 
   if (tools::file_ext(sim$speciesTableFactorial_path) == "rds") {
     ## using rds default from .inputObjects
-    mod$speciesTableFactorial <- prepInputs(
+    speciesTableFactorial <- prepInputs(
       targetFile = basename(sim$speciesTableFactorial_path),
       destinationPath = inputPath(sim),
       url = extractURL("speciesTableFactorial_path", sim),
-      fun = "readRDS", useCache = FALSE, # don't internal cache as it is a waste of time
-      overwrite = TRUE
+      fun = "readRDS", useCache = FALSE # don't internal cache as it is a waste of time
     ) |> Cache(.functionName = "prepInputs_speciesTableFactorial")
   } else {
     ## connect to arrow dataset
     ## TODO: consider adding try-catch and update Biomass_speciesFactorial if fails occur
-    mod$speciesTableFactorial <- arrow::open_dataset(sim$speciesTableFactorial_path, format = fmt)
+    speciesTableFactorial <- arrow::open_dataset(sim$speciesTableFactorial_path, format = fmt)
   }
 
   ## if no PSP data supplied, simList returned unchanged
@@ -264,7 +274,7 @@ Init <- function(sim) {
 
     ## find the max biomass achieved by each species when growing with no competition
     # tempMaxB <- mod$cohortDataFactorial[age == 1, .N, .(pixelGroup)]
-    tempMaxB <- mod$cohortDataFactorial |>
+    tempMaxB <- cohortDataFactorial |>
       dplyr::filter(age == 1) |>
       dplyr::group_by(pixelGroup) |>
       dplyr::summarise(N = n()) |>
@@ -277,7 +287,7 @@ Init <- function(sim) {
     # tempMaxB <- mod$cohortDataFactorial[pixelGroup %in% tempMaxB$pixelGroup,
     #                                     .(inflationFactor = P(sim)$maxBInFactorial/max(B)),
     #                                     , .(pixelGroup, speciesCode)]
-    tempMaxB <- mod$cohortDataFactorial |>
+    tempMaxB <- cohortDataFactorial |>
       dplyr::filter(pixelGroup %in% tempMaxB$pixelGroup) |>
       dplyr::group_by(pixelGroup, speciesCode) |>
       dplyr::summarise(inflationFactor = P(sim)$maxBInFactorial / max(B)) |>
@@ -285,9 +295,9 @@ Init <- function(sim) {
 
     ## speciesTableFactorial sometimes doesn't have 'species' column (only 'speciesCode');
     ## TODO this is a work around -- the speciesTableFactorial should be stable
-    if (!("species" %in% names(mod$speciesTableFactorial))) {
+    if (!("species" %in% names(speciesTableFactorial))) {
       # setnames(speciesTableFactorial, old = "speciesCode", new = "species")
-      mod$speciesTableFactorial <- mod$speciesTableFactorial |>
+      speciesTableFactorial <- speciesTableFactorial |>
         dplyr::rename(species = speciesCode) |>
         dplyr::collect()
     }
@@ -296,7 +306,7 @@ Init <- function(sim) {
     # tempMaxB <- mod$speciesTableFactorial[tempMaxB, on = c("species" = "speciesCode", "pixelGroup")]
     tempMaxB <- arrow_table(tempMaxB) |>
       dplyr::rename(species = speciesCode) |>
-      dplyr::left_join(mod$speciesTableFactorial, by = c("species", "pixelGroup")) |>
+      dplyr::left_join(speciesTableFactorial, by = c("species", "pixelGroup")) |>
       dplyr::collect()
 
     ## pair-wise species will be matched with traits, as the species code won't match
@@ -306,8 +316,8 @@ Init <- function(sim) {
       setDT()
 
     ## bring tables to RAM for use below
-    mod$cohortDataFactorial <- dplyr::collect(mod$cohortDataFactorial) |> setDT()
-    mod$speciesTableFactorial <- dplyr::collect(mod$speciesTableFactorial) |> setDT()
+    cohortDataFactorial <- dplyr::collect(cohortDataFactorial) |> setDT()
+    speciesTableFactorial <- dplyr::collect(speciesTableFactorial) |> setDT()
 
     gc()
 
@@ -358,8 +368,8 @@ Init <- function(sim) {
       )
     toDigest <- list(
       speciesGrowthCurves = spgForDigest, # this has functions in it, so needs to be dealt with
-      speciesTableFactorial = setDT(mod$speciesTableFactorial),
-      cohortDataFactorial = setDT(mod$cohortDataFactorial)
+      speciesTableFactorial = setDT(speciesTableFactorial),
+      cohortDataFactorial = setDT(cohortDataFactorial)
     )
     cacheExtra <- .robustDigest(toDigest)
     message("Done!")
@@ -367,9 +377,9 @@ Init <- function(sim) {
     modifiedSpeciesTables <- modifySpeciesTable(
       GCs = speciesGrowthCurves,
       speciesTable = sim$species,
-      factorialTraits = setDT(mod$speciesTableFactorial),
+      factorialTraits = setDT(speciesTableFactorial),
       ## setDT to deal with reload from Cache (no effect otherwise)
-      factorialBiomass = setDT(mod$cohortDataFactorial),
+      factorialBiomass = setDT(cohortDataFactorial),
       ## setDT to deal with reload from Cache (no effect otherwise)
       sppEquiv = sim$sppEquiv,
       sppEquivCol = P(sim)$sppEquivCol,
