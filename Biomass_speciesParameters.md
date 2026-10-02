@@ -1,6 +1,6 @@
 ---
 title: "LandR _Biomass_speciesParameters_ Manual"
-date: "Last updated: 2026-09-22"
+date: "Last updated: 2026-10-02"
 output:
   bookdown::html_document2:
     toc: true
@@ -28,7 +28,7 @@ always_allow_html: true
 
 
 
-[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/FOR-CAST/Biomass_speciesParameters32993fc1f1b18fca122befafbb3cb5775042b77b)
+[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/FOR-CAST/Biomass_speciesParameters90df0b47679d9b1e3122f35f2c3ba4e003dca178)
 
 [![Issues-badge](figures/issuesBadge.png)](https://github.com/PredictiveEcology/Biomass_speciesParameters/issues)
 
@@ -77,7 +77,7 @@ data/calibration module that does so (e.g., *Biomass_borealDataPrep*). However
 it can be used stand-alone in an initial developmental phase for easier
 inspection of the statistical calibration procedure employed.
 
-As of September 22, 2026, the *raw* PSP data used in this
+As of October 02, 2026, the *raw* PSP data used in this
 module is not freely available, and data sharing agreements must be obtained
 from the governments of SK, AB, and BC to obtain it. However, the *processed and
 anonymized* PSP data is provided via a Google Drive folder accessed
