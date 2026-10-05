@@ -1,5 +1,7 @@
 prepPSPaNPP <- function(studyAreaANPP, PSPgis, PSPmeasure, PSPplot, sppEquivLong,
-                        useHeight, biomassModel, PSPperiod, minDBH) {
+                        useHeight, biomassModel, PSPperiod, minDBH, sppEquiv = NULL,
+                        mergeHybridSprucePSP = NA_character_, excludeBECzones = character(0),
+                        BECzones = NULL) {
   ## crop points to studyArea
   if (!is.null(studyAreaANPP)) {
     studyAreaANPP <- st_as_sf(studyAreaANPP) # in case SPDF
@@ -72,6 +74,13 @@ prepPSPaNPP <- function(studyAreaANPP, PSPgis, PSPmeasure, PSPplot, sppEquivLong
   }
   # message(cli::col_yellow("No PSP biomass estimate possible for these species: "))
   # message(cli::col_yellow(paste(unique(tempOut$missedSpecies), collapse = ", ")))
+
+  ## BC hybrid-zone "Picea glauca" -> the hybrid that sppEquiv merged into Pice_eng. After the
+  ## biomass calculation: biomass keeps the species' own equation, only the species grouping follows
+  if (!is.null(sppEquiv)) {
+    PSPmeasure <- relabelHybridSprucePSP(PSPmeasure, PSPgis, sppEquiv, mergeHybridSprucePSP,
+                                         excludeBECzones, BECzones, speciesCol = "Latin_full")
+  }
 
   #bad biomass estimate
   PSPmeasure <- PSPmeasure[biomass != 0]
@@ -255,37 +264,30 @@ modifySpeciesTable <- function(GCs, speciesTable, factorialTraits, factorialBiom
   outputTraitsT <- purrr::transpose(outputTraits)
   fullDataAll <- rbindlist(outputTraitsT$fullData, idcol = "Pair")
   newTraits <- rbindlist(outputTraitsT$bestTraits, idcol = "Pair")
+  newTraitsAll <- rbindlist(outputTraitsT$bestTraitsAll, idcol = "Pair")
   llAll <- rbindlist(outputTraitsT$ll, idcol = "Pair")
   rm(GCtrans, factorialBiomass, factorialTraitsVarying)
   gc()
-  ## limit best traits to only those that are nearest to longevity provided in SpeciesTable
-  ## Take next higher longevity (the -Inf in the rolling joing, on the "last" join column i.e., longevity)
-  # set(setDT(speciesTable), NULL, "longevityOrig", speciesTable$longevity)
-  suppressWarnings(set(setDT(newTraits), NULL, "longevityOrigFac", newTraits$longevity))
-
-  bt2 <- newTraits[speciesTable[, c("species", "longevity")],
-                   on = c("species", "longevity"), roll = -Inf]
-  bt2[, longevity := longevityOrigFac]
-  bt2 <- unique(bt2[, c("species", "longevity")], by = c("species"))
-  bt1 <- newTraits[speciesTable[, c("species", "longevity")],
-                   on = c("species", "longevity"), roll = Inf]
-  # bt1 <- newTraits[speciesTable[, c("species", "longevity", "longevityOrig")],
-  bt1[, longevity := longevityOrigFac]
-  bt1 <- unique(bt1[, c("species", "longevity")], by = c("species"))
-  speciesTableNew <- na.omit(rbindlist(list(bt1, bt2))  )
-  newTraits <- newTraits[speciesTableNew, on = c("species", "longevity")]
+  newTraits <- limitToSpeciesLongevity(newTraits, speciesTable)
+  llTable <- limitToSpeciesLongevity(newTraitsAll, speciesTable)[, c("species", "growthcurve", "mANPPproportion",
+                                                                    "llNonLinDelta")]
+  rm(newTraitsAll)
 
   ## Collapse new traits and replace old traits
   newTraits[, AICWeights := exp( -0.5 * llNonLinDelta)]
   newTraits[, AICWeightsStd := AICWeights/sum(AICWeights), by = "species"]
 
   ## Showing species-level averages -- this is not assigned to object
-  bestWeighted <- newTraits[, .(growthcurve = round(sum(AICWeightsStd * growthcurve), 2),
+  bestWeighted <- newTraits[, .(growthcurve = sum(AICWeightsStd * growthcurve),
                                 longevity = round(sum(AICWeightsStd * longevity), 0),
                                 mortalityshape = round(sum(AICWeightsStd * mortalityshape), 0),
-                                mANPPproportion = round(sum(AICWeightsStd * mANPPproportion), 3),
+                                mANPPproportion = sum(AICWeightsStd * mANPPproportion),
                                 inflationFactor = round(sum(AICWeightsStd * inflationFactor), 3)),
                             by = "species"]
+  ## the unrounded weighted fits, for `balanceGrowth`
+  bestUnrounded <- bestWeighted[, c("species", "growthcurve", "mANPPproportion")]
+  set(bestWeighted, NULL, "growthcurve", round(bestWeighted$growthcurve, 2))
+  set(bestWeighted, NULL, "mANPPproportion", round(bestWeighted$mANPPproportion, 3))
   speciesTable <- copy(speciesTable)
   bestWeighted <- speciesTable[match(bestWeighted$species, species),
                                c(names(bestWeighted)) := bestWeighted]
@@ -322,7 +324,25 @@ modifySpeciesTable <- function(GCs, speciesTable, factorialTraits, factorialBiom
   ## `psp` (originalData): the PSP observations used for the fits (`biomass` by `standAge` and species,
   ## with `OrigPlotID1` for joining to plot locations / ecoregion). Both surfaced for the module's LANDIS
   ## mode (`P(sim)$landis`); harmless otherwise.
-  return(list(best = bestWeighted, gg = gg, landisCurves = bestIndCurves, psp = originalData))
+  return(list(best = bestWeighted, bestUnrounded = bestUnrounded, llTable = llTable,
+              gg = gg, landisCurves = bestIndCurves, psp = originalData))
+}
+
+## Limit traits to those nearest to the longevity provided in the species table
+limitToSpeciesLongevity <- function(newTraits, speciesTable) {
+  ## Take next higher longevity (the -Inf in the rolling joing, on the "last" join column i.e., longevity)
+  suppressWarnings(set(setDT(newTraits), NULL, "longevityOrigFac", newTraits$longevity))
+
+  bt2 <- newTraits[speciesTable[, c("species", "longevity")],
+                   on = c("species", "longevity"), roll = -Inf]
+  bt2[, longevity := longevityOrigFac]
+  bt2 <- unique(bt2[, c("species", "longevity")], by = c("species"))
+  bt1 <- newTraits[speciesTable[, c("species", "longevity")],
+                   on = c("species", "longevity"), roll = Inf]
+  bt1[, longevity := longevityOrigFac]
+  bt1 <- unique(bt1[, c("species", "longevity")], by = c("species"))
+  speciesTableNew <- na.omit(rbindlist(list(bt1, bt2)))
+  newTraits[speciesTableNew, on = c("species", "longevity")]
 }
 
 buildModels <- function(species, psp, speciesEquiv, sppCol, minSize, q) {
@@ -565,6 +585,10 @@ editSpeciesTraits <- function(name, GC, traits, fT, fB, speciesEquiv, sppCol, ma
   ll[, c("llNonLinDelta") := list(abs(llNonLinear - max(llNonLinear)))]
   set(ll, NULL, "llNonLinear", NULL)
 
+  ## before the truncation below; `balanceGrowth` needs the likelihood away from the best fits
+  llFull <- copy(ll)
+  firstAge <- candFB[standAge == min(standAge), c("pixelGroup", "speciesCode", "inflationFactor")]
+
   #TODO: where does deltaDiff 2 come from?
   deltaDiff <- quantile(ll$llNonLinDelta, 0.25)
   ll <- ll[llNonLinDelta < deltaDiff]
@@ -572,14 +596,17 @@ editSpeciesTraits <- function(name, GC, traits, fT, fB, speciesEquiv, sppCol, ma
   varsToInteger <- c("BscaledNonLinear", "predNonLinear")
   set(candFB, NULL, varsToInteger, lapply(varsToInteger, function(v) asInteger(candFB[[v]])))
 
-  rr <- candFB[standAge == min(standAge)][, c("speciesCode", "llNonLinDelta", "inflationFactor")]
-
+  ## Traits of each pixelGroup in a likelihood table
+  traitsOf <- function(llTable) {
+    rr <- firstAge[llTable, on = "pixelGroup", nomatch = NULL][, c("speciesCode", "llNonLinDelta", "inflationFactor")]
+    SpMapping[fT[rr, on = c("speciesCode")], on = "Sp"]
+  }
   ## Take the average of the best
-  best <- fT[rr, on = c("speciesCode")]
-  bestTraits <- SpMapping[best, on = "Sp"]
+  bestTraits <- traitsOf(ll)
+  bestTraitsAll <- traitsOf(llFull)
   candFB <- SpMapping[candFB, on = "Sp"]
-  rm(rr,fT, SpMapping, deltaDiff, fB)
+  rm(traitsOf, firstAge, llFull, fT, SpMapping, deltaDiff, fB)
 
   gc()
-  return(list(bestTraits = bestTraits, fullData = candFB, ll = ll))
+  return(list(bestTraits = bestTraits, bestTraitsAll = bestTraitsAll, fullData = candFB, ll = ll))
 }

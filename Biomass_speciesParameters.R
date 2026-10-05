@@ -11,7 +11,7 @@ defineModule(sim, list(
     person(c("Ceres"), "Barros", email = "ceres.barros@ubc.ca", role = c("ctb"))
   ),
   childModules = character(0),
-  version = list(Biomass_speciesParameters = "3.0.2.9000"),
+  version = list(Biomass_speciesParameters = "3.0.2.9003"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),
@@ -19,7 +19,7 @@ defineModule(sim, list(
   loadOrder = list(after = c("Biomass_speciesFactorial", "Biomass_borealDataPrep"),
                    before = c("Biomass_core")),
   reqdPkgs = list(
-    "arrow", "cli", "data.table", "dplyr", "fpCompare", "fs", "ggplot2", "gridExtra",
+    "arrow", "bcdata", "cli", "data.table", "dplyr", "fpCompare", "fs", "ggplot2", "gridExtra",
     "mgcv", "nlme", "purrr", "robustbase", "sf",
     "reproducible (>= 2.1.0)",
     "SpaDES.core (>= 2.1.4)",
@@ -28,6 +28,18 @@ defineModule(sim, list(
     "ianmseddy/PSPclean@development(>= 1.0.0.9001)"
   ),
   parameters = rbind(
+    defineParameter("balanceGrowth", "logical", FALSE, NA, NA,
+                    desc = paste("If `TRUE`, give all fitted species the same `growthcurve` (`sharedGrowthcurve`) and set",
+                                 "each species' `mANPPproportion` so that K = `mANPPproportion` * maxB^(1 - `growthcurve`)",
+                                 "is the same for all (`balanceGrowthK`). Under LandR competition a small cohort grows",
+                                 "with K, and any difference in K between species is winner-take-all, while the",
+                                 "per-species fitted `growthcurve` values are statistically indistinguishable.",
+                                 "maxB is the median over the species' rows of `speciesEcoregion`.",
+                                 "`growthcurve` and `mANPPproportion` are then rounded to 3 decimals, not 2.",
+                                 "Species that were not fitted are not changed. The fit of the new values to the PSP data",
+                                 "is returned in `speciesBalanceCheck`, with a warning for species that are worse",
+                                 "than their own best fit by more than 2 log-likelihood units.",
+                                 "Default `FALSE` keeps the fitted values.")),
     defineParameter("biomassModel", "character", "Lambert2005", NA, NA,
                     desc =  paste("The model used to calculate biomass from DBH. Can be either 'Lambert2005' or 'Ung2008'.")),
     defineParameter("landis", "logical", FALSE, NA, NA,
@@ -40,6 +52,15 @@ defineModule(sim, list(
     defineParameter("maxBInFactorial", "integer", 5000L, NA, NA,
                     desc = paste("The arbitrary maximum biomass for the factorial simulations.",
                                  "This is a per-species maximum within a pixel")),
+    defineParameter("excludeBECzonesHybridSpruce", "character", c("BWBS", "SWB"), NA, NA,
+                    desc = paste("BC BEC zones whose PSPs are NOT relabelled by `mergeHybridSprucePSP`:",
+                                 "the boreal zones, where 'Picea glauca' is true white spruce.")),
+    defineParameter("mergeHybridSprucePSP", "character", getOption("LandR.mergeHybridSpruce", "engelmann"), NA, NA,
+                    desc = paste("Mirrors `LandR.mergeHybridSpruce`, and follows it by default. With 'engelmann',",
+                                 "and the hybrid spruce merged into Pice_eng in `sppEquiv`, BC PSP records of",
+                                 "'Picea glauca' (how BC's interior hybrid-zone spruce is recorded) are relabelled",
+                                 "'Picea engelmannii x glauca' so they count as Pice_eng, except in the BEC zones",
+                                 "of `excludeBECzonesHybridSpruce`. 'white' and NA do not relabel.")),
     defineParameter("minimumPlots", "numeric", 50, 10, NA,
                     desc = paste("Minimum number of PSP plots per species")),
     defineParameter("minDBH", "integer", 0L, 0L, NA,
@@ -71,6 +92,13 @@ defineModule(sim, list(
                                  "It is generally recommended to keep this param under 200, given the low data",
                                  "availability of stands aged 200+, with some exceptions.",
                                  "For a closed interval, end with a 1, e.g. `c(31, 101)`.")),
+    defineParameter("sharedGrowthcurve", "numeric", NA, NA, NA,
+                    desc = paste("Only used if `balanceGrowth` is `TRUE`. The `growthcurve` given to all fitted species.",
+                                 "`NA` uses the median of the species' unrounded fitted `growthcurve`.")),
+    defineParameter("targetK", "numeric", NA, NA, NA,
+                    desc = paste("Only used if `balanceGrowth` is `TRUE`. The K = `mANPPproportion` * maxB^(1 - `growthcurve`)",
+                                 "given to all fitted species. `NA` uses the median over species of K computed with",
+                                 "`sharedGrowthcurve` and each species' fitted (unrounded) `mANPPproportion`.")),
     defineParameter("useHeight", "logical", TRUE, NA, NA,
                     desc = paste("Should height be used to calculate biomass (in addition to DBH).",
                                  "DBH is used by itself when height is missing.")),
@@ -115,6 +143,12 @@ defineModule(sim, list(
                               "Must contain columns `MeasureID`, `MeasureYear`, `OrigPlotID1`, and `baseSA`,",
                               "the latter being stand age at year of first measurement"),
                  sourceURL = "https://drive.google.com/file/d/1LmOaEtCZ6EBeIlAm6ttfLqBqQnQu4Ca7/view?usp=sharing"),
+    expectsInput("BECzonesBC", "sf",
+                 desc = paste("Optional. BC BEC zone polygons, with a `ZONE` column, used to exclude the zones of",
+                              "`excludeBECzonesHybridSpruce` from the hybrid-spruce relabel of PSPs.",
+                              "If not supplied, they are fetched from the BC Data Catalogue",
+                              "(WHSE_FOREST_VEGETATION.BEC_BIOGEOCLIMATIC_POLY); if that fails there is no relabel."),
+                 sourceURL = NA),
     expectsInput("PSPgis_sppParams", "sf",
                  desc = paste("Plot location `sf` object. Defaults to PSP data stripped of real `plotID`s/location.",
                               "Must include field `OrigPlotID1` for joining to `PSPplot` object"),
@@ -161,6 +195,12 @@ defineModule(sim, list(
     createsOutput("speciesEcoregion", "data.table",
                   desc = paste("The updated spatially-varying species traits table",
                                "(see description for this object in inputs)")),
+    createsOutput("speciesBalanceCheck", "data.table",
+                  desc = paste("An empty `data.table` unless `P(sim)$balanceGrowth` is `TRUE`, when it has one row per",
+                               "fitted species: fitted and new `growthcurve` and `mANPPproportion`, the `maxB` used, the",
+                               "resulting `K`, and `deltaLL`, the log-likelihood units by which the new values fit the PSP",
+                               "data worse than the species' best fit (linearly interpolated on the factorial grid;",
+                               "`NA` outside the grid).")),
     createsOutput("speciesGrowthCurves", "list",
                   desc = paste("list containing each species' non-linear model,",
                                "model data, and the unfiltered PSP data")),
@@ -222,6 +262,7 @@ Init <- function(sim) {
   ## keeps the default (non-LANDIS) path backwards compatible apart from these two empty placeholders.
   sim$speciesGrowthCurvesLandis <- data.table::data.table()
   sim$speciesGrowthCurvesPSP <- data.table::data.table()
+  sim$speciesBalanceCheck <- data.table::data.table()
 
   ## load factorial tables -------------------------------------------------------------------------
   ## These two tables are scratch for this event only: nothing after `Init` reads them. They are kept
@@ -237,7 +278,7 @@ Init <- function(sim) {
       fun = "readRDS",
       useCache = FALSE, # don't internal cache as it is a waste of time
       url = extractURL("cohortDataFactorial_path", sim)
-    ) |> Cache(.functionName = "prepInputs_cohortDataFactorial")
+    ) # not Cache()d: a cache copy is the same .rds, so a hit saves ~1 s, a miss costs ~6 min
   } else {
     ## connect to arrow dataset
     ## TODO: consider adding try-catch and update Biomass_speciesFactorial if fails occur
@@ -251,7 +292,7 @@ Init <- function(sim) {
       destinationPath = inputPath(sim),
       url = extractURL("speciesTableFactorial_path", sim),
       fun = "readRDS", useCache = FALSE # don't internal cache as it is a waste of time
-    ) |> Cache(.functionName = "prepInputs_speciesTableFactorial")
+    ) # not Cache()d, for the same reason as cohortDataFactorial
   } else {
     ## connect to arrow dataset
     ## TODO: consider adding try-catch and update Biomass_speciesFactorial if fails occur
@@ -330,7 +371,10 @@ Init <- function(sim) {
                        PSPgis =  sim$PSPgis_sppParams, PSPmeasure = sim$PSPmeasure_sppParams, 
                        PSPplot = sim$PSPplot_sppParams, useHeight = P(sim)$useHeight, 
                        biomassModel = P(sim)$biomassModel, minDBH = P(sim)$minDBH, 
-                       sppEquivLong = biomassKey) |>
+                       sppEquivLong = biomassKey, sppEquiv = sim$sppEquiv,
+                       mergeHybridSprucePSP = P(sim)$mergeHybridSprucePSP,
+                       excludeBECzones = P(sim)$excludeBECzonesHybridSpruce,
+                       BECzones = sim$BECzonesBC) |>
       Cache(userTags = c(currentModule(sim), "prepPSPaNPP"))
 
     message("building growth curves") # this cache call takes several minutes to process..
@@ -397,6 +441,16 @@ Init <- function(sim) {
     suppressWarnings(Plots(gg, usePlot = FALSE, fn = print, ggsaveArgs = list(width = 10, height = 7),
           filename = paste("LandR_VS_NLM_growthCurves")))
     sim$species <- modifiedSpeciesTables$best
+    if (isTRUE(P(sim)$balanceGrowth)) {
+      sim$speciesBalanceCheck <- balanceGrowthK(
+        fitted = modifiedSpeciesTables$bestUnrounded,
+        maxB = medianMaxB(sim$speciesEcoregion),
+        ll = modifiedSpeciesTables$llTable,
+        sharedGrowthcurve = P(sim)$sharedGrowthcurve,
+        targetK = P(sim)$targetK
+      )
+      sim$species <- applyBalancedTraits(sim$species, sim$speciesBalanceCheck)
+    }
     if (isTRUE(P(sim)$landis)) {
       ## LANDIS mode: expose the fitted LANDIS-version growth curves (BscaledNonLinear by species and
       ## standAge) and the PSP observations behind them, for LANDIS-II Biomass Succession inputs and the

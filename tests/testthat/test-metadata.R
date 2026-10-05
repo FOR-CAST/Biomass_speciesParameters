@@ -17,7 +17,8 @@ test_that("inputs are the expected names and classes", {
   inputs <- stats::setNames(md$inputObjects$objectClass, md$inputObjects$objectName)
   expect_identical(
     inputs[order(names(inputs))],
-    c(cohortDataFactorial_path   = "fs_path",
+    c(BECzonesBC                 = "sf",
+      cohortDataFactorial_path   = "fs_path",
       PSPgis_sppParams           = "sf",
       PSPmeasure_sppParams       = "data.table",
       PSPplot_sppParams          = "data.table",
@@ -36,6 +37,7 @@ test_that("outputs are the expected names and classes", {
   expect_identical(
     outputs[order(names(outputs))],
     c(species                   = "data.table",
+      speciesBalanceCheck       = "data.table",
       speciesEcoregion          = "data.table",
       speciesGrowthCurves       = "list",
       speciesGrowthCurvesLandis = "data.table",
@@ -49,8 +51,18 @@ test_that("parameters are the expected names", {
     sort(md$parameters$paramName),
     sort(c(".plotInitialTime", ".plotInterval", ".plots", ".saveInitialTime",
            ".saveInterval", ".studyAreaName", ".useCache", ".useParallel",
-           "biomassModel", "landis", "maxBInFactorial", "minDBH", "minimumPlots",
-           "PSPdataTypes", "PSPperiod", "quantileAgeSubset", "speciesFittingApproach",
-           "sppEquivCol", "standAgesForFitting", "useHeight"))
+           "balanceGrowth", "biomassModel", "excludeBECzonesHybridSpruce", "landis",
+           "maxBInFactorial", "mergeHybridSprucePSP", "minDBH", "minimumPlots",
+           "PSPdataTypes", "PSPperiod", "quantileAgeSubset", "sharedGrowthcurve",
+           "speciesFittingApproach", "sppEquivCol", "standAgesForFitting", "targetK",
+           "useHeight"))
   )
+})
+
+test_that("balanceGrowth is off by default, with sharedGrowthcurve and targetK unset", {
+  md <- SpaDES.core::moduleMetadata(module = moduleName, path = modulePath)
+  defaults <- stats::setNames(md$parameters$default, md$parameters$paramName)
+  expect_false(defaults[["balanceGrowth"]])
+  expect_true(is.na(defaults[["sharedGrowthcurve"]]))
+  expect_true(is.na(defaults[["targetK"]]))
 })
