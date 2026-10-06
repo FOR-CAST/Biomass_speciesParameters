@@ -1,14 +1,14 @@
 Known issues: <https://github.com/PredictiveEcology/Biomass_speciesParameters/issues>
 
-# Biomass_speciesParameters 3.0.2.9003
+# Biomass_speciesParameters (development version)
+
+* Growth curves are fitted within bounds (the models' own ranges for `k` and `p`; 0.1-2 x the largest biomass for `A`), and a fit whose optimum lies on a bound is rejected as not identifiable, so the species keeps averaged traits. Unbounded, such curves (e.g. a species whose youngest plots are already at the biomass plateau) either failed to converge or converged by luck of the random start values, so whether a species got fitted traits changed from run to run: over LandWeb's 18 study areas and 10 seeds, 7 species x area combinations were fitted in only some seeds, and some fits converged to parameters outside the module's ranges.
+
+* `buildModels()` draws its random numbers (synthetic young stands, their spread, the fits' start values) from its own `seed` (default `1L`) and restores the caller's RNG state, so whether a species' curve can be fit no longer depends on random numbers used earlier in the simulation.
 
 * `balanceGrowth = TRUE` no longer stops when a fitted species has no `speciesEcoregion` rows (e.g. it is below the ecoregion support threshold everywhere in the study area, as Betu_pap in several BC TSAs). Such a species cannot establish, so it is left out of the balance, keeps its fitted traits, and a message names it.
 
-# Biomass_speciesParameters 3.0.2.9002
-
 * Fixed two bugs in the 3.0.2.9001 additions, found in the first FIIS run with them. `relabelHybridSprucePSP` matched plots by the factor codes of `OrigPlotID1` (PSPclean returns a factor) instead of by name, so almost no BC plot got its BEC zone and none was relabelled. `medianMaxB` failed with `balanceGrowth = TRUE` when `maxB` is integer, because `median()` returns an integer for an odd number of rows and a double for an even number.
-
-# Biomass_speciesParameters 3.0.2.9001
 
 * BC interior (hybrid-zone) spruce PSPs are recorded as "Picea glauca", so they matched nothing, and were dropped, when the study area's `sppEquiv` has the hybrid spruce merged into Engelmann (`LandR.mergeHybridSpruce = "engelmann"`). New parameter `mergeHybridSprucePSP` (default: follow that option; NA or "white" for no relabel) relabels those BC records as "Picea engelmannii x glauca", so they count as `Pice_eng`. BC plots in the BEC zones of the new parameter `excludeBECzonesHybridSpruce` (default `BWBS`, `SWB`: boreal white spruce) are not relabelled. The BEC zones come from the new optional input `BECzonesBC`, else from the BC Data Catalogue (`bcdata`, added to `reqdPkgs`); if neither is available there is a warning and no relabel.
 * Missing packages in `reqdPkgs`: added `dplyr`.
