@@ -11,7 +11,7 @@ defineModule(sim, list(
     person(c("Ceres"), "Barros", email = "ceres.barros@ubc.ca", role = c("ctb"))
   ),
   childModules = character(0),
-  version = list(Biomass_speciesParameters = "3.0.2.9005"),
+  version = list(Biomass_speciesParameters = "3.0.2.9006"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),
@@ -398,7 +398,16 @@ Init <- function(sim) {
     noDataSpp <- vapply(sim$speciesGrowthCurves[classes == "character"], FUN = function(x) {
       x == "insufficient data"
     }, FUN.VALUE = logical(1))
-    
+
+    ## No species has a fitted growth curve, so there are no traits to estimate:
+    ## modifySpeciesTable() stopped in limitToSpeciesLongevity(), joining its empty trait table on
+    ## `species`. Leave the species traits as given, as with PSPdataTypes = "none".
+    if (!any(vapply(sim$speciesGrowthCurves, isFittedGC, logical(1)))) {
+      warning(noFittedCurvesMessage(sim$speciesGrowthCurves, P(sim)$minimumPlots,
+                                    P(sim)$.studyAreaName), call. = FALSE)
+      return(sim)
+    }
+
     if (any(noDataSpp)) {
       ## Like species whose fit fails, these get no traits from modifySpeciesTable(), so their
       ## inflationFactor is NA (unless `sim$species` supplied one) and updateSpeciesTables()
