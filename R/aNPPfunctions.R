@@ -153,8 +153,17 @@ buildGrowthCurves <- function(PSPdata, speciesCol, sppEquiv, quantileAgeSubset,
     gcSpecies2 <- unique(speciesComp$spComp) |> setNames(nm = _)
     speciesForSplit <- if (isTRUE(speciesFittingApproach == "pairwise")) gcSpecies2 else gcSpecies1
     speciesCompListAll <- split(speciesComp, speciesComp$spComp)
+    ## The plots of each fit: under "pairwise", those of its own pair; under "focal", those of every
+    ## composition the species is part of. Species codes are matched whole: matched as substrings
+    ## (grepl), a code that is part of another (Pice_eng in Pice_eng_gla) drew that species' plots.
+    compMembers <- strsplit(names(speciesCompListAll), "__", fixed = TRUE)
     speciesCompList <- lapply(speciesForSplit, function(spName) {
-      rbindlist(speciesCompListAll[grepl(spName, names(speciesCompListAll))])
+      inComp <- if (isTRUE(speciesFittingApproach == "pairwise")) {
+        names(speciesCompListAll) == spName
+      } else {
+        vapply(compMembers, function(members) spName %in% members, logical(1))
+      }
+      rbindlist(speciesCompListAll[inComp])
     })
     SpPSPList <- lapply(speciesCompList, function(speciesCompInner) {
       SpPSP[MeasureID %in% speciesCompInner$MeasureID][spDom > 0.2]
@@ -358,13 +367,16 @@ buildModels <- function(species, psp, speciesEquiv, sppCol, minSize, q, seed = 1
                        biomass = spPlotBiomass[1], spDom = spDom[1]),
                    by = .(speciesTemp, MeasureYear, OrigPlotID1)]
 
-  ## test if there are sufficient plots to estimate traits
-  if (nrow(standData) < minSize) {
+  ## test if there are sufficient plots to estimate traits: the plot-years each curve is fitted to.
+  ## Counting the rows of `standData` counted a plot-year twice under "focal" when another species was
+  ## also co-dominant (its "Other" row is not fitted), and under "pairwise" once per species of the pair.
+  nPlotYears <- fittedPlotYears(standData)
+  if (nPlotYears < minSize) {
     GC <- "insufficient data"
     names(GC) <- species
 
-    warning("insufficient PSP data to estimate traits:\n",
-            "(have ", nrow(standData), " rows; requested minimum ", minSize, " rows)")
+    warning("insufficient PSP data to estimate traits for ", species, ": ", nPlotYears,
+            " plot-years (plot x measurement year), fewer than minimumPlots (", minSize, ")")
 
     return(GC)
   }
@@ -510,6 +522,18 @@ buildModels <- function(species, psp, speciesEquiv, sppCol, minSize, q, seed = 1
                           NonLinearModel = nlsout)
 
   return(sppGrowthCurves)
+}
+
+## The number of plot-years (unique plot x measurement year) that buildModels() fits each curve to:
+## the smallest over the species fitted, i.e. all in `standData` except the co-dominant species that
+## the "focal" approach pools as "Other", which are not fitted. 0 if there are none.
+fittedPlotYears <- function(standData) {
+  fitted <- standData[!is.na(speciesTemp) & speciesTemp != "Other"]
+  if (nrow(fitted) == 0L) {
+    return(0L)
+  }
+  plotYears <- unique(fitted, by = c("speciesTemp", "MeasureYear", "OrigPlotID1"))
+  min(plotYears[, .N, by = "speciesTemp"]$N)
 }
 
 ## Seed the RNG and return a function that restores the caller's RNG state (call it on exit), so a

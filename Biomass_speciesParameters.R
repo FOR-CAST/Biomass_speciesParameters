@@ -11,7 +11,7 @@ defineModule(sim, list(
     person(c("Ceres"), "Barros", email = "ceres.barros@ubc.ca", role = c("ctb"))
   ),
   childModules = character(0),
-  version = list(Biomass_speciesParameters = "3.0.2.9004"),
+  version = list(Biomass_speciesParameters = "3.0.2.9005"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),
@@ -62,7 +62,14 @@ defineModule(sim, list(
                                  "'Picea engelmannii x glauca' so they count as Pice_eng, except in the BEC zones",
                                  "of `excludeBECzonesHybridSpruce`. 'white' and NA do not relabel.")),
     defineParameter("minimumPlots", "numeric", 50, 10, NA,
-                    desc = paste("Minimum number of PSP plots per species")),
+                    desc = paste("Minimum number of PSP plot-years (plot x measurement year) a growth curve is",
+                                 "fitted to. Under 'focal', the plot-years where the species has more than 20%",
+                                 "of plot biomass (the co-dominant species pooled as 'Other' are not counted);",
+                                 "under 'pairwise', those where the two species of the pair are the only ones",
+                                 "above 20%; under 'single', those where the species has more than 50%.",
+                                 "Species with fewer are not fitted and, like species whose fit fails, get",
+                                 "the mean `growthcurve`, `mortalityshape`, `mANPPproportion` and",
+                                 "`inflationFactor` of the fitted species of their `hardsoft` class.")),
     defineParameter("minDBH", "integer", 0L, 0L, NA,
                     desc = paste("Minimum diameter at breast height (DBH) in cm used to filter PSP data.",
                                  "Defaults to 0 cm, i.e. all tree measurements are used.")),
@@ -393,10 +400,15 @@ Init <- function(sim) {
     }, FUN.VALUE = logical(1))
     
     if (any(noDataSpp)) {
+      ## Like species whose fit fails, these get no traits from modifySpeciesTable(), so their
+      ## inflationFactor is NA (unless `sim$species` supplied one) and updateSpeciesTables()
+      ## (LandR::modifySpeciesAndSpeciesEcoregionTable) gives them the hardsoft-class means.
       message(cli::col_yellow(
         "Insufficient data to estimate species parameters for ",
-        paste(names(noDataSpp), collapse = ", "),
-        " - will keep original user-supplied parameters"
+        paste(names(noDataSpp)[noDataSpp], collapse = ", "),
+        " (fewer than minimumPlots = ", P(sim)$minimumPlots, " PSP plot-years).",
+        " Like species whose fit fails, they will get the mean growthcurve, mortalityshape,",
+        " mANPPproportion and inflationFactor of the fitted species of their hardsoft class."
       ))
     }
 
