@@ -153,8 +153,17 @@ buildGrowthCurves <- function(PSPdata, speciesCol, sppEquiv, quantileAgeSubset,
     gcSpecies2 <- unique(speciesComp$spComp) |> setNames(nm = _)
     speciesForSplit <- if (isTRUE(speciesFittingApproach == "pairwise")) gcSpecies2 else gcSpecies1
     speciesCompListAll <- split(speciesComp, speciesComp$spComp)
+    ## The plots of each fit: under "pairwise", those of its own pair; under "focal", those of every
+    ## composition the species is part of. Species codes are matched whole: matched as substrings
+    ## (grepl), a code that is part of another (Pice_eng in Pice_eng_gla) drew that species' plots.
+    compMembers <- strsplit(names(speciesCompListAll), "__", fixed = TRUE)
     speciesCompList <- lapply(speciesForSplit, function(spName) {
-      rbindlist(speciesCompListAll[grepl(spName, names(speciesCompListAll))])
+      inComp <- if (isTRUE(speciesFittingApproach == "pairwise")) {
+        names(speciesCompListAll) == spName
+      } else {
+        vapply(compMembers, function(members) spName %in% members, logical(1))
+      }
+      rbindlist(speciesCompListAll[inComp])
     })
     SpPSPList <- lapply(speciesCompList, function(speciesCompInner) {
       SpPSP[MeasureID %in% speciesCompInner$MeasureID][spDom > 0.2]
@@ -358,13 +367,16 @@ buildModels <- function(species, psp, speciesEquiv, sppCol, minSize, q, seed = 1
                        biomass = spPlotBiomass[1], spDom = spDom[1]),
                    by = .(speciesTemp, MeasureYear, OrigPlotID1)]
 
-  ## test if there are sufficient plots to estimate traits
-  if (nrow(standData) < minSize) {
+  ## test if there are sufficient plots to estimate traits: the plot-years each curve is fitted to.
+  ## Counting the rows of `standData` counted a plot-year twice under "focal" when another species was
+  ## also co-dominant (its "Other" row is not fitted), and under "pairwise" once per species of the pair.
+  nPlotYears <- fittedPlotYears(standData)
+  if (nPlotYears < minSize) {
     GC <- "insufficient data"
     names(GC) <- species
 
-    warning("insufficient PSP data to estimate traits:\n",
-            "(have ", nrow(standData), " rows; requested minimum ", minSize, " rows)")
+    warning("insufficient PSP data to estimate traits for ", species, ": ", nPlotYears,
+            " plot-years (plot x measurement year), fewer than minimumPlots (", minSize, ")")
 
     return(GC)
   }
@@ -512,6 +524,18 @@ buildModels <- function(species, psp, speciesEquiv, sppCol, minSize, q, seed = 1
   return(sppGrowthCurves)
 }
 
+## The number of plot-years (unique plot x measurement year) that buildModels() fits each curve to:
+## the smallest over the species fitted, i.e. all in `standData` except the co-dominant species that
+## the "focal" approach pools as "Other", which are not fitted. 0 if there are none.
+fittedPlotYears <- function(standData) {
+  fitted <- standData[!is.na(speciesTemp) & speciesTemp != "Other"]
+  if (nrow(fitted) == 0L) {
+    return(0L)
+  }
+  plotYears <- unique(fitted, by = c("speciesTemp", "MeasureYear", "OrigPlotID1"))
+  min(plotYears[, .N, by = "speciesTemp"]$N)
+}
+
 ## Seed the RNG and return a function that restores the caller's RNG state (call it on exit), so a
 ## function's random draws neither depend on nor change the RNG stream it was called from.
 localSeed <- function(seed) {
@@ -544,6 +568,35 @@ notIdentifiable <- function(model, onBound) {
             condition = simpleError(trimws(sub("^Error : ", "", msg))))
 }
 
+## TRUE if `GC`, an element of buildGrowthCurves()'s output, has a fitted growth curve for each of
+## its species, which editSpeciesTraits() needs to estimate traits. FALSE for "insufficient data"
+## (fewer than `minimumPlots` plot-years) and when every model of a species failed or was not
+## identifiable.
+isFittedGC <- function(GC) {
+  if (!is.list(GC)) {
+    return(FALSE)
+  }
+  classesNonLinear <- unlist(lapply(GC$NonLinearModel, class))
+  !is.null(classesNonLinear) && !"try-error" %in% classesNonLinear
+}
+
+## The warning for a study area in which no species (or pair, under "pairwise") has a fitted growth
+## curve: each one, and why. `GCs` is buildGrowthCurves()'s output.
+noFittedCurvesMessage <- function(GCs, minimumPlots, studyAreaName = NA_character_) {
+  tooFew <- vapply(GCs, function(GC) identical(as.vector(GC), "insufficient data"), logical(1))
+  paste0(
+    "No growth curve could be fitted from the PSP data",
+    if (length(studyAreaName) && !is.na(studyAreaName)) paste0(" in ", studyAreaName),
+    if (any(tooFew)) paste0("; fewer than minimumPlots (", minimumPlots, ") plot-years: ",
+                            paste(names(GCs)[tooFew], collapse = ", ")),
+    if (any(!tooFew)) paste0("; every fit failed or was not identifiable: ",
+                             paste(names(GCs)[!tooFew], collapse = ", ")),
+    if (!length(GCs)) "; no species to fit",
+    ". Bypassing species traits estimation from PSP data, as with PSPdataTypes = 'none':",
+    " the species traits given as input are used unchanged."
+  )
+}
+
 editSpeciesTraits <- function(name, GC, traits, fT, fB, speciesEquiv, sppCol, maxBInFactorial,
                               standAge, standAgesForFitting = c(0, 150), approach) {
 
@@ -558,24 +611,18 @@ editSpeciesTraits <- function(name, GC, traits, fT, fB, speciesEquiv, sppCol, ma
   traits <- traits[species %in% name]
   ## with two species - the gc might converge for one only
   ## this structure is to catch try-errors in both pairwise and single
-  if (class(GC) == "try-error" || class(GC) == "character") {
-    message("not estimating traits for ", name, " as model was not fit. Output of fitting attempt:")
-    message(paste(GC))
-    return(NULL)
-  } else {
-    ## catch when not all models converged
-    classesNonLinear <- unlist(lapply(GC$NonLinearModel, class))
-    ## decided to allow non-converged GCs, if non-linear converged
-    if (any("try-error" %in% c(classesNonLinear)) || is.null(classesNonLinear)) {
-      msg <- if (is.null(classesNonLinear)) {
-        "NULL"
-      } else {
-        paste(GC$NonLinearModel)
-      }
-      message("not estimating traits for ", name, " as model was not fit. Output of fitting attempt:")
-      message(msg)
-      return(NULL)
+  ## (Init() bypasses trait estimation when no GC passes isFittedGC(), so the two must agree)
+  if (!isFittedGC(GC)) {
+    msg <- if (!is.list(GC)) {
+      paste(GC)
+    } else if (length(GC$NonLinearModel)) {
+      paste(GC$NonLinearModel)
+    } else {
+      "NULL"
     }
+    message("not estimating traits for ", name, " as model was not fit. Output of fitting attempt:")
+    message(msg)
+    return(NULL)
   }
 
   #under focal or pairwise, there will be two species in original data
