@@ -11,9 +11,21 @@ Known issues: <https://github.com/PredictiveEcology/Biomass_speciesParameters/is
 
 * `buildModels()` draws its random numbers (synthetic young stands, their spread, the fits' start values) from its own `seed` (default `1L`) and restores the caller's RNG state, so whether a species' curve can be fit no longer depends on random numbers used earlier in the simulation.
 
+# Biomass_speciesParameters 3.1.0
+
+This release brings a new storage system for the module's large intermediate data, which is faster and uses much less memory during a run. A new "LANDIS mode" exports the fitted growth curves for each species in the form LANDIS-II Biomass Succession uses. An optional new setting gives all species one shared growth curve shape, so that no species wins only because of small differences in its fitted curve.
+
+The module now uses the current format of the permanent sample plot data. In British Columbia, plots recorded as white spruce in the hybrid spruce zone are counted correctly when a project merges hybrid spruce with Engelmann spruce. A species that cannot establish anywhere in the study area no longer stops the run. Fitted species parameters will differ from earlier versions.
+
+# Biomass_speciesParameters 3.0.2.9003
+
 * `balanceGrowth = TRUE` no longer stops when a fitted species has no `speciesEcoregion` rows (e.g. it is below the ecoregion support threshold everywhere in the study area, as Betu_pap in several BC TSAs). Such a species cannot establish, so it is left out of the balance, keeps its fitted traits, and a message names it.
 
+# Biomass_speciesParameters 3.0.2.9002
+
 * Fixed two bugs in the 3.0.2.9001 additions, found in the first FIIS run with them. `relabelHybridSprucePSP` matched plots by the factor codes of `OrigPlotID1` (PSPclean returns a factor) instead of by name, so almost no BC plot got its BEC zone and none was relabelled. `medianMaxB` failed with `balanceGrowth = TRUE` when `maxB` is integer, because `median()` returns an integer for an odd number of rows and a double for an even number.
+
+# Biomass_speciesParameters 3.0.2.9001
 
 * BC interior (hybrid-zone) spruce PSPs are recorded as "Picea glauca", so they matched nothing, and were dropped, when the study area's `sppEquiv` has the hybrid spruce merged into Engelmann (`LandR.mergeHybridSpruce = "engelmann"`). New parameter `mergeHybridSprucePSP` (default: follow that option; NA or "white" for no relabel) relabels those BC records as "Picea engelmannii x glauca", so they count as `Pice_eng`. BC plots in the BEC zones of the new parameter `excludeBECzonesHybridSpruce` (default `BWBS`, `SWB`: boreal white spruce) are not relabelled. The BEC zones come from the new optional input `BECzonesBC`, else from the BC Data Catalogue (`bcdata`, added to `reqdPkgs`); if neither is available there is a warning and no relabel.
 * Missing packages in `reqdPkgs`: added `dplyr`.

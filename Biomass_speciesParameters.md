@@ -28,7 +28,7 @@ always_allow_html: true
 
 
 
-[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/FOR-CAST/Biomass_speciesParameters850401a9a1a8c2bfe5a0ddc53f96a383074d1279)
+[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/PredictiveEcology/Biomass_speciesParametersa44467499899e70e32e41d35dc1fbcb658b3ac92)
 
 [![Issues-badge](figures/issuesBadge.png)](https://github.com/PredictiveEcology/Biomass_speciesParameters/issues)
 
@@ -553,7 +553,7 @@ because the default will attempt to use PSP data that may be inaccessible
    <td style="text-align:left;"> 50 </td>
    <td style="text-align:left;"> 10 </td>
    <td style="text-align:left;"> NA </td>
-   <td style="text-align:left;"> Minimum number of PSP plot-years (plot x measurement year) a growth curve is fitted to. Under 'focal', the plot-years where the species has more than 20% of plot biomass (the co-dominant species pooled as 'Other' are not counted); under 'pairwise', those where the two species of the pair are the only ones above 20%; under 'single', those where the species has more than 50%. Species with fewer are not fitted and, like species whose fit fails, get the mean `growthcurve`, `mortalityshape`, `mANPPproportion` and `inflationFactor` of the fitted species of their `hardsoft` class. </td>
+   <td style="text-align:left;"> Minimum number of PSP plots per species </td>
   </tr>
   <tr>
    <td style="text-align:left;"> minDBH </td>
