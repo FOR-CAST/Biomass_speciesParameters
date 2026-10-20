@@ -33,8 +33,11 @@ prepPSPaNPP <- function(studyAreaANPP, PSPgis, PSPmeasure, PSPplot, sppEquivLong
   PSPmeasure <- PSPmeasure[OrigPlotID1 %in% forestPlots$OrigPlotID1, ]
   PSPplot <- PSPplot[OrigPlotID1 %in% PSPmeasure$OrigPlotID1, ]
 
-  ## Restrict to trees >= ## DBH. Maybe necessary to get rid of small trees when they are inconsistently recorded
-  PSPmeasure <- PSPmeasure[DBH >= minDBH,]
+  ## Restrict to trees >= minDBH. Maybe necessary to get rid of small trees when they are inconsistently
+  ## recorded. Compared outside `[`: the join above added PSPplot's own `minDBH` column (each plot's
+  ## recorded minimum DBH), which inside `[` would mask this argument
+  keepTrees <- PSPmeasure$DBH >= minDBH
+  PSPmeasure <- PSPmeasure[keepTrees]
   ## decide what to do about above line and stem/density. PES approach is to just fix the data...
   
   #get column for estimating biomass
