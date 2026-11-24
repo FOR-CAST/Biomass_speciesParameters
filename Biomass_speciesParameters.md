@@ -28,7 +28,7 @@ always_allow_html: true
 
 
 
-[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/PredictiveEcology/Biomass_speciesParameters7585d2d34d6f25f12d42bf6a3dc5854d8456ea4d)
+[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/FOR-CAST/Biomass_speciesParameters558edb8674d20bcea3709a85cea9d6ba3f6f445c)
 
 [![Issues-badge](figures/issuesBadge.png)](https://github.com/PredictiveEcology/Biomass_speciesParameters/issues)
 
@@ -482,7 +482,7 @@ determining the geographic extent of the PSP data.
   <tr>
    <td style="text-align:left;"> PSPplot_sppParams </td>
    <td style="text-align:left;"> data.table </td>
-   <td style="text-align:left;"> Merged PSP and TSP plot data. Defaults to randomized PSP data stripped of real `plotID`s. Must contain columns `MeasureID`, `MeasureYear`, `OrigPlotID1`, and `baseSA`, the latter being stand age at year of first measurement </td>
+   <td style="text-align:left;"> Merged PSP and TSP plot data. Defaults to randomized PSP data stripped of real `plotID`s. Must contain columns `MeasureID`, `MeasureYear`, `OrigPlotID1`, and `baseSA`, the latter being stand age at year of first measurement. An optional `minDBH` column, each plot's recorded minimum DBH (cm), is a floor under the `minDBH` parameter: trees below it are not used. </td>
    <td style="text-align:left;"> https://drive.google.com/file/d/1LmOaEtCZ6EBeIlAm6ttfLqBqQnQu4Ca7/view?usp=sharing </td>
   </tr>
   <tr>
@@ -500,7 +500,7 @@ determining the geographic extent of the PSP data.
   <tr>
    <td style="text-align:left;"> species </td>
    <td style="text-align:left;"> data.table </td>
-   <td style="text-align:left;"> A table of invariant species traits with the following trait colums: 'species', 'Area', 'longevity', 'sexualmature', 'shadetolerance', 'firetolerance', 'seeddistance_eff', 'seeddistance_max', 'resproutprob', 'mortalityshape', 'growthcurve', 'resproutage_min', 'resproutage_max', 'postfireregen', 'wooddecayrate', 'leaflongevity' 'leafLignin', and 'hardsoft'. Only 'species', 'longevity' and 'hardsoft' are used in this module; 'longevity', 'growthcurve' and 'mortalityshape' of the fitted species are replaced by estimated values. Default is from Dominic Cyr and Yan Boulanger's applications of LANDIS-II </td>
+   <td style="text-align:left;"> A table of invariant species traits with the following trait colums: 'species', 'Area', 'longevity', 'sexualmature', 'shadetolerance', 'firetolerance', 'seeddistance_eff', 'seeddistance_max', 'resproutprob', 'mortalityshape', 'growthcurve', 'resproutage_min', 'resproutage_max', 'postfireregen', 'wooddecayrate', 'leaflongevity' 'leafLignin', and 'hardsoft'. Only 'species', 'longevity' and 'hardsoft' are used in this module; 'growthcurve' and 'mortalityshape' of the fitted species are replaced by estimated values. 'longevity' selects the factorial curves a species is fitted from, and is not changed. Default is from Dominic Cyr and Yan Boulanger's applications of LANDIS-II </td>
    <td style="text-align:left;"> https://raw.githubusercontent.com/dcyr/LANDIS-II_IA_generalUseFiles/master/speciesTraits.csv </td>
   </tr>
   <tr>
@@ -646,7 +646,7 @@ because the default will attempt to use PSP data that may be inaccessible
    <td style="text-align:left;"> 50 </td>
    <td style="text-align:left;"> 10 </td>
    <td style="text-align:left;"> NA </td>
-   <td style="text-align:left;"> Minimum number of PSP plots per species </td>
+   <td style="text-align:left;"> Minimum number of PSP plot-years (plot x measurement year) a growth curve is fitted to. Under 'focal', the plot-years where the species has more than 20% of plot biomass (the co-dominant species pooled as 'Other' are not counted); under 'pairwise', those where the two species of the pair are the only ones above 20%; under 'single', those where the species has more than 50%. Species with fewer are not fitted and, like species whose fit fails, get the mean `growthcurve`, `mortalityshape`, `mANPPproportion` and `inflationFactor` of the fitted species of their `hardsoft` class. </td>
    <td style="text-align:left;"> TRUE </td>
   </tr>
   <tr>
@@ -655,7 +655,7 @@ because the default will attempt to use PSP data that may be inaccessible
    <td style="text-align:left;"> 0 </td>
    <td style="text-align:left;"> 0 </td>
    <td style="text-align:left;"> NA </td>
-   <td style="text-align:left;"> Minimum diameter at breast height (DBH) in cm used to filter PSP data. Defaults to 0 cm, i.e. all tree measurements are used. </td>
+   <td style="text-align:left;"> Minimum diameter at breast height (DBH), in cm, of the PSP trees used to fit growth curves. Each plot's own recorded minimum DBH (the `minDBH` column of `PSPplot_sppParams`, if present) is a floor: a tree is kept if its DBH reaches the larger of the two. The default, 0, keeps each plot's trees from its recorded minimum. </td>
    <td style="text-align:left;"> TRUE </td>
   </tr>
   <tr>
