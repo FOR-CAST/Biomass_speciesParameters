@@ -11,7 +11,7 @@ defineModule(sim, list(
     person(c("Ceres"), "Barros", email = "ceres.barros@ubc.ca", role = c("ctb"))
   ),
   childModules = character(0),
-  version = list(Biomass_speciesParameters = "3.1.0.9004"),
+  version = list(Biomass_speciesParameters = "3.1.0.9005"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),
@@ -20,7 +20,7 @@ defineModule(sim, list(
                    before = c("Biomass_core")),
   reqdPkgs = list(
     "arrow", "bcdata", "cli", "data.table", "dplyr", "fpCompare", "fs", "ggplot2", "gridExtra",
-    "mgcv", "nlme", "purrr", "robustbase", "sf",
+    "googledrive", "httr2", "mgcv", "nlme", "purrr", "robustbase", "sf",
     "reproducible (>= 2.1.0)",
     "SpaDES.core (>= 2.1.4)",
     "PredictiveEcology/LandR@development (>= 1.1.0.9077)",
@@ -88,11 +88,11 @@ defineModule(sim, list(
                                  "both a single value and a list of vectors, named according to `sppEquivCol`.")),
     defineParameter("speciesFittingApproach", "character", "focal", NA, NA,
                     desc =  paste(
-                      "Either 'all', 'pairwise', 'focal' or 'single', indicating whether to pool",
-                      "all species into one fit, do pairwise species (for multiple cohort situations)",
+                      "Either 'pairwise', 'focal' or 'single', indicating whether to",
+                      "do pairwise species (for multiple cohort situations)",
                       "do pairwise species, but using a focal species approach where all other species",
                       "are pooled into 'other' or do one species at a time.",
-                      "If 'all', all species will have identical species-level traits."
+                      "'all' (pool all species into one fit) is no longer available."
                     )),
     defineParameter("sppEquivCol", "character", "LandR", NA, NA,
                     paste("The column in `sim$sppEquiv` data.table that defines individual species.",
@@ -139,7 +139,7 @@ defineModule(sim, list(
                    "Path where the `cohortDataFactorial` object is saved as an `arrow` dataset.",
                    "A large `cohortData` table (**sensu** `Biomass_core`) with columns `age`, `B`,",
                    "and `speciesCode` that joins with `speciesTableFactorial`.",
-                   "See `PredictiveEcology/Biomass_factorial` for further information."
+                   "See `PredictiveEcology/Biomass_speciesFactorial` for further information."
                   ),
                  sourceURL = "https://drive.google.com/file/d/1NH7OpAnWtLyO8JVnhwdMJakOyapBnuBH/"),
     expectsInput("PSPmeasure_sppParams", "data.table",
@@ -171,8 +171,10 @@ defineModule(sim, list(
                               "'firetolerance', 'seeddistance_eff', 'seeddistance_max', 'resproutprob',",
                               "'mortalityshape', 'growthcurve', 'resproutage_min', 'resproutage_max',",
                               "'postfireregen', 'wooddecayrate', 'leaflongevity' 'leafLignin', and 'hardsoft'.",
-                              "Only 'growthcurve', 'hardsoft', 'longevity' and 'mortalityshape' are used in this module.",
-                              "'longevity' selects the factorial curves a species is fitted from, and is not changed.",
+                              "Only 'species', 'longevity' and 'hardsoft' are used in this module;",
+                              "'growthcurve' and 'mortalityshape' of the fitted species are replaced by estimated",
+                              "values. 'longevity' selects the factorial curves a species is fitted from, and is",
+                              "not changed.",
                               "Default is from Dominic Cyr and Yan Boulanger's applications of LANDIS-II"),
                  sourceURL = "https://raw.githubusercontent.com/dcyr/LANDIS-II_IA_generalUseFiles/master/speciesTraits.csv"),
     expectsInput("speciesEcoregion", "data.table",
@@ -186,7 +188,7 @@ defineModule(sim, list(
                    "A large species table (**sensu** `Biomass_core`) with all columns used by",
                    "Biomass_core, e.g., `longevity`, `growthcurve`, `mortalityshape`, etc., when",
                    "it was used to generate `cohortDataFactorial`.",
-                   "See `PredictiveEcology/Biomass_factorial` for futher information."
+                   "See `PredictiveEcology/Biomass_speciesFactorial` for further information."
                  ),
                  sourceURL = "https://drive.google.com/file/d/1NH7OpAnWtLyO8JVnhwdMJakOyapBnuBH/"),
     expectsInput("sppEquiv", "data.table",
@@ -529,7 +531,7 @@ Save <- function(sim) {
   if (!suppliedElsewhere("sppEquiv", sim)) {
     ## pass a default sppEquivalencies_CA for common species in western Canada
     sppEquiv <- LandR::sppEquivalencies_CA
-    ## sppEquiv should be Boreal to match default P(sim)$sppEquivCol
+    ## filtering on the Boreal codes selects the same rows as on the LandR codes (default P(sim)$sppEquivCol)
     sim$sppEquiv <- sppEquiv[Boreal %in% c("Pice_Mar", "Pice_Gla", "Pinu_Con",
                                            "Pinu_Ban", "Popu_Tre", "Lari_Lar",
                                            "Betu_Pap", "Abie_Bal"), ]
