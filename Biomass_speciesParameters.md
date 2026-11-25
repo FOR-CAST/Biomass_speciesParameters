@@ -28,7 +28,7 @@ always_allow_html: true
 
 
 
-[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/FOR-CAST/Biomass_speciesParameters38b193af20b747b9c9df2bad8986a7bfb902478e)
+[![module-version-Badge](figures/moduleVersionBadge.png)](https://github.com/FOR-CAST/Biomass_speciesParametersa0328079194f2e44909a8ae9e7493505b929325d)
 
 [![Issues-badge](figures/issuesBadge.png)](https://github.com/PredictiveEcology/Biomass_speciesParameters/issues)
 
@@ -970,7 +970,7 @@ Table \@ref(tab:eventObjects-Biomass-speciesParameters) lists, for each object, 
   <tr>
    <td style="text-align:left;padding-left: 2em;" indentlevel="1"> sppEquiv </td>
    <td style="text-align:left;"> .inputObjects (default) </td>
-   <td style="text-align:left;"> init: Init() </td>
+   <td style="text-align:left;"> init: Init(), init (own code) </td>
   </tr>
   <tr>
    <td style="text-align:left;padding-left: 2em;" indentlevel="1"> sppEquivLong </td>
@@ -1039,6 +1039,14 @@ init event, step 1 of 2
 init event, step 2 of 2
 
 ![](figures/Biomass_speciesParameters_io_init_updateSpeciesTables.png){width=100%}
+
+
+
+#### init (own code) {-}
+
+the init event's own code, outside the functions it calls
+
+![](figures/Biomass_speciesParameters_io_init_own.png){width=100%}
 
 ## Usage example {#bsppparam-example}
 
