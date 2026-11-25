@@ -1,9 +1,9 @@
 ## prepPSPaNPP() keeps a tree if its DBH reaches the larger of `minDBH` and its plot's own recorded
-## minimum DBH, PSPplot's `minDBH` column (as PSPclean returns it). Before 3.1.0.9002 the filter ran
-## after the join that adds that column, which inside `[` masked the argument: each tree was compared
-## with its plot's minimum only, so `minDBH` had no effect (BC plots, which record trees from 2 cm, kept
-## them at `minDBH = 9`). 3.1.0.9002 compared each tree with `minDBH` only, so the default `minDBH = 0`
-## also kept the trees under their plot's minimum (those of Alberta plots under 9.1 cm, for one).
+## minimum DBH, PSPplot's `minDBH` column (as PSPclean returns it). The filter used to run after the
+## join that adds that column, which inside `[` masked the argument: each tree was compared with its
+## plot's minimum only, so `minDBH` had no effect (BC plots, which record trees from 2 cm, kept them at
+## `minDBH = 9`). Comparing each tree with `minDBH` alone would instead make the default `minDBH = 0`
+## keep the trees under their plot's minimum (those of Alberta plots under 9.1 cm, for one).
 
 ## plots measured once, each with 10 trees of each DBH class (the forest filter needs >= 30 trees at
 ## the first measurement): one plot per recorded minimum DBH in `plotMinDBH`, or, if it is NULL, one
@@ -46,11 +46,11 @@ keptDBH <- function(minDBH, plotMinDBH) {
 ## Saskatchewan's since 1977), from 9.1 cm (as Alberta's), from 12 cm, and of a plot without one
 plotMin <- c(2, 7.1, 9.1, 12, NA)
 
-test_that("regression: the default minDBH = 0 keeps the trees kept before 3.1.0.9002", {
+test_that("regression: the default minDBH = 0 keeps the trees it kept before the fix", {
   ## prepPSPaNPP calls biomassCalculation(), setkey() ... unqualified, as it does attached in a simList
   withr::local_package("pemisc")
   withr::local_package("data.table")
-  ## before 3.1.0.9002 each tree was compared with its plot's recorded minimum DBH only, so a plot
+  ## before the fix each tree was compared with its plot's recorded minimum DBH only, so a plot
   ## without one kept no trees
   p <- smallTreesPSP(plotMin)
   preFix <- merge(p$measure, p$plot, by = c("MeasureID", "OrigPlotID1", "MeasureYear", "source"))
